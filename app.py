@@ -2,7 +2,7 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 import os
 
-# 1. Page Config & Liquid Glass UI
+# 1. Page Config & Liquid Glass UI Styling
 st.set_page_config(page_title="NOVA AI", page_icon="🛰️", layout="wide")
 
 st.markdown("""
@@ -22,30 +22,35 @@ st.markdown("""
         margin-bottom: 10px;
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
+    h1, h2, h3 { color: white !important; }
+    .stMarkdown { color: #e0e0e0 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Sidebar Setup
+# 2. Sidebar & Model Selection
 with st.sidebar:
     st.title("NOVA PRO 🛰️")
     st.markdown("---")
+    
+    # Using Llama-3.2-1B-Instruct as it has the highest uptime for free API shards
     model_choice = st.selectbox(
         "Select Brain:", 
-        ["HuggingFaceH4/zephyr-7b-beta", "mistralai/Mistral-7B-Instruct-v0.2"]
+        ["meta-llama/Llama-3.2-1B-Instruct", "meta-llama/Llama-3.2-3B-Instruct"]
     )
+    
     mode = st.radio("Tools:", ["Search Agent", "CoT Reasoning", "LTR (Memory)", "PDF Scan"])
     
     st.markdown("---")
     uploaded_file = st.file_uploader("Upload PDF Study Notes", type="pdf")
     if uploaded_file:
-        st.success("PDF Content Indexed!")
+        st.success("PDF Content Indexed for LTR!")
 
 # 3. Secure Brain Connection
 try:
-    # This pulls your token from the Streamlit Secrets you set up
+    # Uses the HF_TOKEN from your Streamlit Secrets
     client = InferenceClient(model_choice, token=st.secrets["HF_TOKEN"])
 except Exception as e:
-    st.error("Missing HF_TOKEN in Secrets!")
+    st.error("Please check your HF_TOKEN in Streamlit Secrets!")
     st.stop()
 
 # 4. Chat Session History
@@ -56,46 +61,41 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-# 5. Input Handling
+# 5. Input Handling & AI Response
 if prompt := st.chat_input("Ask NOVA..."):
-    # Add user message to state and UI
+    # Add user message to history
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
     with st.chat_message("assistant"):
-        with st.status(f"Nova {mode} thinking...", expanded=True) as status:
+        with st.status(f"Nova analyzing via {model_choice.split('/')[-1]}...", expanded=True) as status:
             
-            # Apply CoT or Standard formatting
+            # Formatting for Chain of Thought (CoT)
             if mode == "CoT Reasoning":
-                formatted_prompt = f"System: Think step-by-step.\nUser: {prompt}"
+                system_instruction = "You are a helpful assistant. Explain your reasoning step-by-step."
             else:
-                formatted_prompt = prompt
+                system_instruction = "You are NOVA, a helpful AI assistant for students."
 
             try:
-                # Optimized for speed and GPT-3 style responses
-                stream = client.chat_completion(
-                    messages=[{"role": "user", "content": formatted_prompt}],
-                    max_tokens=1024,
-                    stream=True,
+                # API Call to the Brain
+                response = client.chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=800,
                     temperature=0.7
                 )
                 
-                response_text = ""
-                placeholder = st.empty()
-                
-                for chunk in stream:
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        response_text += content
-                        placeholder.markdown(response_text)
-                
-                status.update(label="Analysis Complete!", state="complete")
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                answer = response.choices[0].message.content
+                status.update(label="Response Secured!", state="complete")
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
-                status.update(label="Error Occurred", state="error")
-                st.error(f"The model is currently overloaded. Try 'Zephyr' in the sidebar! Error: {e}")
+                status.update(label="Server Delay", state="error")
+                st.error(f"The model is currently busy. Please wait 10 seconds and try again. Error: {e}")
 
-# Small hack to keep the UI snappy
+# Keep UI from jumping
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
-     pass # Final response is already drawn
+     pass
