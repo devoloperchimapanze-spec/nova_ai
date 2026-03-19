@@ -45,10 +45,17 @@ if prompt := st.chat_input("Ask NOVA..."):
             else:
                 formatted_prompt = prompt
 
-            try:
-                response = client.text_generation(formatted_prompt, max_new_tokens=1024, temperature=0.7)
+try:
+                # Use chat_completion for better "GPT-3" style conversation
+                response = client.chat_completion(
+                    messages=[{"role": "user", "content": formatted_prompt}],
+                    max_tokens=512,
+                    temperature=0.7
+                )
+                answer = response.choices[0].message.content
                 status.update(label="Analysis Complete!", state="complete")
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
             except Exception as e:
+                st.error(f"Brain is tired (API Error): {e}")
                 st.error(f"Server Busy: {e}")
