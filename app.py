@@ -70,7 +70,39 @@ if prompt := st.chat_input("Ask NOVA..."):
     with st.chat_message("assistant"):
         with st.status(f"Nova analyzing via {model_choice.split('/')[-1]}...", expanded=True) as status:
             
-            # Formatting for Chain of Thought (CoT)
+           # --- ADD THIS AT THE TOP OF YOUR FILE ---
+from langchain_community.tools import DuckDuckGoSearchRun
+search = DuckDuckGoSearchRun()
+
+# --- REPLACE YOUR INPUT HANDLING BLOCK ---
+if prompt := st.chat_input("Ask NOVA..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user").write(prompt)
+
+    with st.chat_message("assistant"):
+        with st.status(f"Nova {mode} active...", expanded=True) as status:
+            
+            # 1. ACTUAL SEARCH LOGIC
+            if mode == "Search Agent":
+                st.write("🌐 Searching the live web for current info...")
+                search_result = search.run(prompt)
+                final_prompt = f"Context from Internet: {search_result}\n\nUser Question: {prompt}"
+            elif mode == "CoT Reasoning":
+                final_prompt = f"Explain step-by-step: {prompt}"
+            else:
+                final_prompt = prompt
+
+            try:
+                response = client.chat_completion(
+                    messages=[{"role": "user", "content": final_prompt}],
+                    max_tokens=800
+                )
+                answer = response.choices[0].message.content
+                status.update(label="Analysis Complete!", state="complete")
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+            except Exception as e:
+                st.error(f"Server Error: {e}") # Formatting for Chain of Thought (CoT)
             if mode == "CoT Reasoning":
                 system_instruction = "You are a helpful assistant. Explain your reasoning step-by-step."
             else:
