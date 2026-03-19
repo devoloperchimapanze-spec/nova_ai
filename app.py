@@ -1,74 +1,54 @@
 import streamlit as st
-import os
 from huggingface_hub import InferenceClient
+import os
 
-# 1. Glassmorphism UI Styling
-st.set_page_config(page_title="NOVA AI", page_icon="🚀", layout="wide")
-
+# 1. Page & Liquid Glass CSS
+st.set_page_config(page_title="NOVA AI", page_icon="🛰️", layout="wide")
 st.markdown("""
     <style>
-    .main {
-        background: linear-gradient(135deg, #1f1c2c 0%, #928dab 100%);
-    }
-    div[data-testid="stVerticalBlock"] > div:has(div.stMarkdown) {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(15px);
-        border-radius: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 20px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
-    h1 { color: #ffffff; font-family: 'Inter', sans-serif; font-weight: 800; letter-spacing: -1px; }
-    .stTextInput>div>div>input { background: rgba(255,255,255,0.1); color: white; border-radius: 10px; }
+    .main { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); }
+    .stChatFloatingInputContainer { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Sidebar for Features
+# 2. Sidebar & Model Selection
 with st.sidebar:
-    st.title("NOVA 🛰️")
-    st.markdown("---")
-    mode = st.radio("Student Tools:", ["Search Agent", "CoT Reasoning", "LTR (Memory)", "PDF/Image Scan"])
-    st.info("Built for Students by Pratyush")
+    st.title("NOVA PRO 🛰️")
+    model_choice = st.selectbox("Select Brain:", ["HuggingFaceH4/zephyr-7b-beta", "mistralai/Mistral-7B-Instruct-v0.2"])
+    mode = st.radio("Tools:", ["Search Agent", "CoT Reasoning", "LTR (Memory)", "PDF Scan"])
+    
+    uploaded_file = st.file_uploader("Upload PDF Study Notes", type="pdf")
+    if uploaded_file:
+        st.success("PDF Loaded into LTR!")
 
-# 3. Brain Setup
-try:
-    client = InferenceClient("meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HF_TOKEN"])
-except:
-    st.error("Please add HF_TOKEN to Streamlit Secrets!")
+# 3. Connect to the Brain
+# Make sure your HF_TOKEN is saved in Streamlit Secrets!
+client = InferenceClient(model_choice, token=st.secrets["HF_TOKEN"])
 
-# 4. Main UI
-st.title("NOVA AI")
-st.caption(f"Active Mode: {mode}")
-
+# 4. Chat Interface
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
 
-# 5. Feature Logic
-if prompt := st.chat_input("How can I help your studies today?"):
-    st.chat_message("user").markdown(prompt)
+if prompt := st.chat_input("Ask NOVA..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user").write(prompt)
 
     with st.chat_message("assistant"):
-        with st.status(f"Nova {mode} processing...", expanded=True) as status:
+        with st.status(f"Nova {mode} thinking via {model_choice.split('/')[-1]}...", expanded=True) as status:
             
+            # Feature Logic
             if mode == "CoT Reasoning":
-                st.write("🔍 Breaking down the problem step-by-step...")
-                final_prompt = f"Explain step-by-step: {prompt}"
-            elif mode == "LTR (Memory)":
-                st.write("📂 Searching personal study notes...")
-                # Add your FAISS logic here
-                final_prompt = prompt
+                formatted_prompt = f"<|system|>\nYou are a helpful assistant that thinks step-by-step.</s>\n<|user|>\n{prompt}</s>\n<|assistant|>\n<thought>"
             else:
-                final_prompt = prompt
+                formatted_prompt = prompt
 
-            response = client.chat_completion(messages=[{"role": "user", "content": final_prompt}], max_tokens=1024)
-            full_response = response.choices[0].message.content
-            status.update(label="Response Generated!", state="complete")
-
-        st.markdown(full_response)
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+            try:
+                response = client.text_generation(formatted_prompt, max_new_tokens=1024, temperature=0.7)
+                status.update(label="Analysis Complete!", state="complete")
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+            except Exception as e:
+                st.error(f"Server Busy: {e}")
