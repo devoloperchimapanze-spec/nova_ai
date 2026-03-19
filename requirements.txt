@@ -1,0 +1,10 @@
+transformers
+torch
+gradio
+faiss-cpu
+sentence-transformers
+huggingface_hub
+langchain-community
+duckduckgo-search
+pypdf
+numpy
